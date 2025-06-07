@@ -1,0 +1,5 @@
+# すべてテキストとして扱い、改行は LF
+* text eol=lf
+
+# Windows 用バッチだけ CRLF を許可したい場合の例
+*.bat text eol=crlf
