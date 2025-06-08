@@ -57,4 +57,7 @@
    ```
     のように書くだけで OK です。
 
+## その他:Config 設定
+   ![Config 設定][def]
 
+   [def]: ./simulink_sample/Config_setting.png "Config 設定"
