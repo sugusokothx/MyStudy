@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ja" style="scroll-behavior: smooth;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPMモータ誘起電圧推定 インタラクティブガイド</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutral with Teal and Amber accents -->
+    <!-- Application Structure Plan: A single-page application with a sticky navigation bar for easy access to different thematic sections. The core of the app is an interactive "Estimation Method Explorer" which replaces a static table with a dynamic, user-driven interface. Users can select different estimation methods, and the application dynamically updates a radar chart and detailed text descriptions. This structure is chosen to transform the dense report into an engaging learning tool, allowing users to actively compare and contrast complex technical options rather than passively reading. The flow is designed to guide the user from the core problem (temperature effects) to the solutions (estimation methods) and their application (compensation strategies), creating a logical and educational journey. -->
+    <!-- Visualization & Content Choices: 
+        - Goal: Compare Estimation Methods -> Viz: Interactive Radar Chart (Chart.js) + Dynamic Text Blocks. Interaction: User clicks buttons to select a method, triggering JS to update both the chart and text. Justification: This provides a multi-dimensional, at-a-glance comparison of complex trade-offs (e.g., accuracy vs. complexity), which is more intuitive and engaging than a static table.
+        - Goal: Explain Core Problem -> Viz: HTML/CSS Diagram. Interaction: Subtle animations on load. Justification: A simple visual flow diagram clarifies the causal chain of temperature affecting torque, making the fundamental problem easy to grasp.
+        - Goal: Explain Compensation Strategy -> Viz: HTML/CSS FOC Diagram. Interaction: None, static clarity. Justification: A clean, styled diagram built with HTML/CSS integrates better with the page design than an image or Mermaid diagram, clearly showing where the estimated flux fits into the control loop.
+        - All content is populated from the source report, with key technical terms and concepts preserved. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #F8F7F4;
+            color: #383734;
+        }
+        .nav-link {
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+        }
+        .nav-link.active, .nav-link:hover {
+            color: #0d9488;
+            border-bottom-color: #0d9488;
+        }
+        .card {
+            background-color: #FFFFFF;
+            border: 1px solid #E7E5E4;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+            transition: box-shadow 0.3s ease;
+        }
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07);
+        }
+        .btn {
+            transition: all 0.3s ease;
+        }
+        .btn-active {
+            background-color: #0d9488 !important;
+            color: white !important;
+            box-shadow: 0 4px 14px 0 rgb(13 148 136 / 30%);
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 40vh;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-white/80 backdrop-blur-lg sticky top-0 z-50 border-b border-stone-200">
+        <nav class="container mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <h1 class="text-xl md:text-2xl font-bold text-teal-700">IPM誘起電圧推定ガイド</h1>
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="#overview" class="nav-link px-2 py-1">概要</a>
+                    <a href="#effects" class="nav-link px-2 py-1">温度の影響</a>
+                    <a href="#explorer" class="nav-link px-2 py-1">推定手法</a>
+                    <a href="#compensation" class="nav-link px-2 py-1">トルク補償</a>
+                    <a href="#conclusion" class="nav-link px-2 py-1">結論</a>
+                </div>
+                <div class="md:hidden">
+                    <select id="mobile-nav" class="bg-stone-200 border border-stone-300 text-stone-900 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block w-full p-2.5">
+                        <option value="#overview">概要</option>
+                        <option value="#effects">温度の影響</option>
+                        <option value="#explorer">推定手法</option>
+                        <option value="#compensation">トルク補償</option>
+                        <option value="#conclusion">結論</option>
+                    </select>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section id="overview" class="py-16 md:py-24 bg-white">
+            <div class="container mx-auto px-4 text-center">
+                <p class="text-teal-600 font-semibold">PERFORMANCE & RELIABILITY</p>
+                <h2 class="text-3xl md:text-5xl font-bold mt-2 text-stone-800">なぜ誘起電圧の推定が重要なのか？</h2>
+                <p class="mt-6 max-w-3xl mx-auto text-lg text-stone-600">
+                    IPMモータは電気自動車(EV)や産業機械に不可欠ですが、ロータ温度の上昇は永久磁石の磁力を弱め、トルク出力を不安定にします。この課題を克服し、全運転領域で精密なトルク制御と高効率を実現するためには、温度によって変動する誘起電圧（PM磁束）を正確にオンラインで推定する技術が極めて重要となります。
+                </p>
+            </div>
+        </section>
+
+        <section id="effects" class="py-16 md:py-24">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <p class="text-teal-600 font-semibold">THE CORE PROBLEM</p>
+                    <h2 class="text-3xl md:text-4xl font-bold mt-2 text-stone-800">温度がトルクを蝕むメカニズム</h2>
+                    <p class="mt-4 max-w-2xl mx-auto text-lg text-stone-600">ロータ温度の上昇は、連鎖的にモータ性能を低下させます。この基本的な因果関係の理解が、解決策への第一歩です。</p>
+                </div>
+
+                <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4">
+                    <div class="card p-6 text-center w-full md:w-1/5">
+                        <div class="text-4xl mb-2">🌡️</div>
+                        <h3 class="font-bold text-xl">温度上昇</h3>
+                        <p class="text-sm text-stone-500">負荷運転によりロータ温度が上昇</p>
+                    </div>
+                    <div class="text-4xl text-teal-500 font-mono self-center transform md:-translate-y-4">→</div>
+                    <div class="card p-6 text-center w-full md:w-1/5">
+                        <div class="text-4xl mb-2">🧲</div>
+                        <h3 class="font-bold text-xl">PM磁束 (${\psi_f}$) 減少</h3>
+                        <p class="text-sm text-stone-500">永久磁石の磁力が低下 (約-0.1%/°C)</p>
+                    </div>
+                    <div class="text-4xl text-teal-500 font-mono self-center transform md:-translate-y-4">→</div>
+                    <div class="card p-6 text-center w-full md:w-1/5">
+                        <div class="text-4xl mb-2">⚡️</div>
+                        <h3 class="font-bold text-xl">誘起電圧 減少</h3>
+                        <p class="text-sm text-stone-500">逆起電力が磁束に比例して低下</p>
+                    </div>
+                    <div class="text-4xl text-teal-500 font-mono self-center transform md:-translate-y-4">→</div>
+                    <div class="card p-6 text-center w-full md:w-1/5">
+                        <div class="text-4xl mb-2">⚙️</div>
+                        <h3 class="font-bold text-xl">トルク出力 低下</h3>
+                        <p class="text-sm text-stone-500">磁石トルクが減少し、制御精度と効率が悪化</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="explorer" class="py-16 md:py-24 bg-white">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <p class="text-teal-600 font-semibold">INTERACTIVE ANALYSIS</p>
+                    <h2 class="text-3xl md:text-4xl font-bold mt-2 text-stone-800">推定手法エクスプローラー</h2>
+                    <p class="mt-4 max-w-2xl mx-auto text-lg text-stone-600">
+                        モータの運転速度域に応じて、最適な推定手法は異なります。ここでは、代表的な手法の長所・短所・特性をインタラクティブに比較・探求できます。手法を選択して詳細を確認してください。
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+                    <div>
+                        <div class="mb-8">
+                            <h3 class="text-2xl font-bold mb-4 text-stone-700">速度域と手法の選択</h3>
+                             <div class="p-4 bg-stone-100 rounded-lg">
+                                <h4 class="font-semibold text-lg mb-3">中〜高速域 (逆起電力ベース)</h4>
+                                <div id="method-selector-high" class="flex flex-wrap gap-2"></div>
+                                
+                                <h4 class="font-semibold text-lg mb-3 mt-6">ゼロ〜低速域 (突極性ベース)</h4>
+                                <div id="method-selector-low" class="flex flex-wrap gap-2"></div>
+                            </div>
+                        </div>
+                        <div class="card p-6">
+                            <h3 id="method-title" class="text-2xl font-bold text-teal-700">手法を選択してください</h3>
+                            <p id="method-principle" class="mt-2 text-stone-600"></p>
+                            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <h4 class="font-semibold text-lg text-green-600">利点</h4>
+                                    <ul id="method-pros" class="list-disc list-inside mt-1 text-stone-600"></ul>
+                                </div>
+                                <div>
+                                    <h4 class="font-semibold text-lg text-red-600">欠点</h4>
+                                    <ul id="method-cons" class="list-disc list-inside mt-1 text-stone-600"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card p-6">
+                        <h3 class="text-2xl font-bold text-center mb-4 text-stone-700">特性比較レーダーチャート</h3>
+                        <div class="chart-container">
+                            <canvas id="method-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="compensation" class="py-16 md:py-24">
+            <div class="container mx-auto px-4">
+                <div class="text-center mb-12">
+                    <p class="text-teal-600 font-semibold">CLOSING THE LOOP</p>
+                    <h2 class="text-3xl md:text-4xl font-bold mt-2 text-stone-800">推定値を用いたトルク補償戦略</h2>
+                    <p class="mt-4 max-w-2xl mx-auto text-lg text-stone-600">
+                        オンラインで推定したPM磁束 (${\psi_{f\_est}}$) を制御アルゴリズムにフィードバックすることで、温度変動に影響されない、正確で安定したトルク出力を実現します。
+                    </p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div class="card p-6">
+                        <h3 class="text-xl font-bold mb-4">FOCシステムへの統合</h3>
+                        <p class="mb-4 text-stone-600">下の図は、PM磁束推定ブロックが追加されたフィールドオリエンテッド制御(FOC)システムの概念図です。推定された磁束(${\psi_{f\_est}}$)が、MTPA/FW制御器にフィードバックされ、最適な電流指令値 ($i_d^*, i_q^*$) の計算に使用されます。</p>
+                        <div class="border border-stone-200 rounded-lg p-4 bg-stone-50 text-sm">
+                            <div class="flex flex-col space-y-2">
+                                <div class="flex items-center justify-center">
+                                    <div class="border-2 border-teal-500 bg-teal-50 text-teal-800 font-semibold p-2 rounded-md shadow-sm">MTPA/FW制御器 (ψ_f_est を使用)</div>
+                                </div>
+                                <div class="text-center font-bold text-2xl text-stone-400">↓ <span class="text-sm font-mono align-text-top">i_d*, i_q*</span></div>
+                                <div class="flex items-center justify-center">
+                                    <div class="border border-stone-300 p-2 rounded-md bg-white">電流制御器</div>
+                                </div>
+                                <div class="text-center font-bold text-2xl text-stone-400">↓ <span class="text-sm font-mono align-text-top">v_d*, v_q*</span></div>
+                                <div class="flex items-center justify-center">
+                                    <div class="border border-stone-300 p-2 rounded-md bg-white">インバータ</div>
+                                </div>
+                                <div class="text-center font-bold text-2xl text-stone-400">↓ <span class="text-sm font-mono align-text-top">v_abc</span></div>
+                                <div class="flex items-center justify-center">
+                                    <div class="border border-stone-300 p-2 rounded-md bg-white">IPMモータ</div>
+                                </div>
+                                <div class="text-center font-bold text-2xl text-stone-400">↑ <span class="text-2xl text-amber-500 font-bold mx-4">↩</span> <span class="text-sm font-mono align-text-top">ψ_f_est</span></div>
+                                <div class="flex items-center justify-center">
+                                    <div class="border-2 border-amber-500 bg-amber-50 text-amber-800 font-semibold p-2 rounded-md shadow-sm">PM磁束オブザーバ (EKF, MRAS等)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                     <div class="card p-6">
+                        <h3 class="text-xl font-bold mb-4">補償のキーポイント</h3>
+                        <ul class="space-y-4 text-stone-600">
+                            <li class="flex items-start">
+                                <span class="text-teal-500 font-bold mr-3">✓</span>
+                                <div>
+                                    <h4 class="font-semibold">MTPA軌道の動的更新</h4>
+                                    <p>${\psi_{f\_est}}$ の変化に合わせて、最大トルク/電流(MTPA)を実現する最適な電流指令値 ($i_d, i_q$) の組み合わせを再計算またはルックアップテーブルで更新し、常に最大効率を維持します。</p>
+                                </div>
+                            </li>
+                            <li class="flex items-start">
+                                <span class="text-teal-500 font-bold mr-3">✓</span>
+                                <div>
+                                    <h4 class="font-semibold">弱め磁束制御の適応</h4>
+                                    <p>高速域での弱め磁束(FW)制御において、${\psi_{f\_est}}$ の低下に合わせて磁束を打ち消すための $i_d$ 電流を調整し、電圧・電流制限を厳守します。</p>
+                                </div>
+                            </li>
+                             <li class="flex items-start">
+                                <span class="text-teal-500 font-bold mr-3">✓</span>
+                                <div>
+                                    <h4 class="font-semibold">安定性の確保</h4>
+                                    <p>不正確な磁束推定は過補償による発熱や不安定性を招く可能性があります。ロバストな推定アルゴリズムの選択と慎重な調整が、システム全体の安定性の鍵となります。</p>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="conclusion" class="py-16 md:py-24 bg-white">
+            <div class="container mx-auto px-4">
+                 <div class="text-center mb-12">
+                    <p class="text-teal-600 font-semibold">SUMMARY & OUTLOOK</p>
+                    <h2 class="text-3xl md:text-4xl font-bold mt-2 text-stone-800">結論と今後の展望</h2>
+                </div>
+                <div class="max-w-4xl mx-auto space-y-6 text-stone-700">
+                    <p>IPMモータのトルクを温度変動から守るためには、PM磁束のオンライン推定が不可欠です。本ガイドでは、中〜高速域でのオブザーバベースの手法（EKF, UKF, SMO等）と、低速・ゼロ速域でのHFI法が有効であることを示しました。</p>
+                    <p>最適な手法は、要求精度、計算コスト、動作範囲のトレードオフによって決まります。多くの場合、HFIと高性能オブザーバを組み合わせたハイブリッドアプローチが、全速度域での安定した制御を実現します。</p>
+                    <p class="font-semibold text-stone-800">今後の展望としては、AI/機械学習を活用したデータ駆動型オブザーバや、各種センサ情報を統合するセンサフュージョン技術などが、よりロバストで高精度な推定を実現する鍵となるでしょう。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-stone-800 text-stone-300 py-8">
+        <div class="container mx-auto px-4 text-center">
+            <p>IPMモータ誘起電圧推定 インタラクティブガイド</p>
+            <p class="text-sm mt-2 text-stone-400">このページは技術報告書を基に生成された対話的な教育用資料です。</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+
+            const estimationMethods = {
+                high_speed: [
+                    { id: 'ekf', name: 'EKF', principle: '非線形システムのためのカルマンフィルタの拡張。ヤコビ行列でシステムを線形化し、状態とパラメータ(ψf)を同時推定する。', pros: ['ガウスノイズに対し最適', '多変数・パラメータの同時推定が可能'], cons: ['計算負荷が高い', '線形化誤差による発散リスク', '調整が煩雑'], scores: { accuracy: 5, robustness: 4, complexity: 5, cost: 4 } },
+                    { id: 'ukf', name: 'UKF', principle: 'アンセンテッド変換を用い、ヤコビ行列計算を回避するEKFの改良版。非線形性に強い。', pros: ['EKFより高精度(特に強非線形)', 'ヤコビ行列が不要'], cons: ['計算量がEKFと同等か大きい', '調整が必要'], scores: { accuracy: 5, robustness: 5, complexity: 4, cost: 5 } },
+                    { id: 'smo', name: 'SMO', principle: '不連続な制御入力で推定値を実際値に強制収束させる。外乱やパラメータ変動に強い。', pros: ['パラメータ変動にロバスト', '実装が比較的単純'], cons: ['チャタリング現象', 'フィルタによる位相遅れ'], scores: { accuracy: 3, robustness: 5, complexity: 3, cost: 3 } },
+                    { id: 'mras', name: 'MRAS', principle: '参照モデルと適応モデルの出力誤差がゼロになるようにパラメータ(ψf)を調整する。', pros: ['特定パラメータ推定に有効', 'QベースはRs変動に強い'], cons: ['安定性の設計が重要', '複数パラメータ同時変動に弱い'], scores: { accuracy: 4, robustness: 4, complexity: 3, cost: 3 } },
+                    { id: 'lo', name: 'Luenberger', principle: 'システムの線形モデルと出力誤差フィードバックを用いて状態を推定する。', pros: ['概念が単純', '調整によりロバスト化可能'], cons: ['モデルの不正確さに敏感', '低速性能が低い'], scores: { accuracy: 3, robustness: 2, complexity: 2, cost: 2 } },
+                    { id: 'volt', name: '電圧モデル', principle: '電圧方程式から逆起電力を積分して磁束を計算する。LPFで積分器を代替することが多い。', pros: ['原理が非常に単純'], cons: ['積分ドリフト', 'Rs変動に敏感', 'LPFによる低速誤差'], scores: { accuracy: 2, robustness: 1, complexity: 1, cost: 1 } },
+                ],
+                low_speed: [
+                    { id: 'hfi', name: 'HFI', principle: 'モータの突極性(Ld≠Lq)を利用。高周波信号を注入し、その電流応答からロータ位置を推定する。', pros: ['ゼロ速・低速での動作が可能', '初期位置検出が可能'], cons: ['追加のトルクリップル・騒音・損失', '突極性に依存する'], scores: { accuracy: 3, robustness: 3, complexity: 4, cost: 4 } }
+                ]
+            };
+            
+            const methodSelectorHigh = document.getElementById('method-selector-high');
+            const methodSelectorLow = document.getElementById('method-selector-low');
+            const methodTitle = document.getElementById('method-title');
+            const methodPrinciple = document.getElementById('method-principle');
+            const methodPros = document.getElementById('method-pros');
+            const methodCons = document.getElementById('method-cons');
+            const mobileNav = document.getElementById('mobile-nav');
+
+            const ctx = document.getElementById('method-chart').getContext('2d');
+            const chartData = {
+                labels: ['精度 (Accuracy)', 'ロバスト性 (Robustness)', '実装複雑度 (Complexity)', '計算コスト (Cost)'],
+                datasets: [{
+                    label: '選択された手法',
+                    data: [0, 0, 0, 0],
+                    backgroundColor: 'rgba(13, 148, 136, 0.2)',
+                    borderColor: 'rgb(13, 148, 136)',
+                    pointBackgroundColor: 'rgb(13, 148, 136)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgb(13, 148, 136)'
+                }]
+            };
+            const chartOptions = {
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        angleLines: { display: true, color: '#E7E5E4' },
+                        suggestedMin: 0,
+                        suggestedMax: 5,
+                        grid: { color: '#E7E5E4' },
+                        pointLabels: {
+                            font: { size: 12 },
+                            color: '#57534E'
+                        },
+                        ticks: {
+                            backdropColor: 'rgba(255, 255, 255, 0.7)',
+                            color: '#78716C',
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            };
+            let methodChart = new Chart(ctx, { type: 'radar', data: chartData, options: chartOptions });
+
+            function createButtons(methods, container) {
+                methods.forEach(method => {
+                    const button = document.createElement('button');
+                    button.textContent = method.name;
+                    button.classList.add('btn', 'px-3', 'py-1.5', 'text-sm', 'font-semibold', 'rounded-md', 'bg-white', 'text-stone-700', 'border', 'border-stone-300', 'hover:bg-stone-50');
+                    button.dataset.methodId = method.id;
+                    button.dataset.speed = container.id.includes('high') ? 'high_speed' : 'low_speed';
+                    container.appendChild(button);
+                });
+            }
+
+            createButtons(estimationMethods.high_speed, methodSelectorHigh);
+            createButtons(estimationMethods.low_speed, methodSelectorLow);
+            
+            const allButtons = document.querySelectorAll('#method-selector-high button, #method-selector-low button');
+
+            allButtons.forEach(button => {
+                button.addEventListener('click', (e) => {
+                    updateMethodDetails(e.target.dataset.methodId, e.target.dataset.speed);
+                });
+            });
+
+            function updateMethodDetails(methodId, speed) {
+                const method = estimationMethods[speed].find(m => m.id === methodId);
+                if (!method) return;
+
+                methodTitle.textContent = method.name;
+                methodPrinciple.textContent = "原理: " + method.principle;
+                
+                methodPros.innerHTML = '';
+                method.pros.forEach(pro => {
+                    const li = document.createElement('li');
+                    li.textContent = pro;
+                    methodPros.appendChild(li);
+                });
+
+                methodCons.innerHTML = '';
+                method.cons.forEach(con => {
+                    const li = document.createElement('li');
+                    li.textContent = con;
+                    methodCons.appendChild(li);
+                });
+
+                const scores = method.scores;
+                methodChart.data.datasets[0].data = [scores.accuracy, scores.robustness, scores.complexity, scores.cost];
+                methodChart.data.datasets[0].label = method.name;
+                methodChart.update();
+                
+                allButtons.forEach(btn => {
+                   btn.classList.remove('btn-active');
+                   if (btn.dataset.methodId === methodId) {
+                       btn.classList.add('btn-active');
+                   }
+                });
+            }
+
+            updateMethodDetails('ekf', 'high_speed');
+            
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('.nav-link');
+
+            window.addEventListener('scroll', () => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (pageYOffset >= sectionTop - 80) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.getAttribute('href').includes(current)) {
+                        link.classList.add('active');
+                    }
+                });
+
+                const mobileNavOption = document.querySelector(`#mobile-nav option[value="#${current}"]`);
+                if(mobileNavOption) {
+                    mobileNav.value = `#${current}`;
+                }
+            });
+
+            mobileNav.addEventListener('change', (e) => {
+                window.location.href = e.target.value;
+            });
+        });
+    </script>
+</body>
+</html>
