@@ -7,20 +7,22 @@ function [vd_corr, vq_corr, d_vd, d_vq] = deadTimeCompDQ( ...
 %#codegen
 %---------------------------------------------------------------
 % Dead-time compensation in dq frame (formula 1-B)
-%
 %   Δvd = -(2/3)*Vtd*(sgn(id)*cosθ - sgn(iq)*sinθ)
 %   Δvq = -(2/3)*Vtd*(sgn(id)*sinθ + sgn(iq)*cosθ)
-%
-%   Vtd = Vdc * t_dead / Tsw
 %---------------------------------------------------------------
 
-% ── 1. 定数計算 ─────────────────────────────
-Vtd = Vdc * t_dead / Tsw;   % 「デッドタイム電圧」 [V]
-k   = -2/3 * Vtd;           % 係数を前もってまとめる
+% ── 0. 符号保持用の persistent 変数 ──────────────────────────
+persistent id_prev iq_prev
+if isempty(id_prev); id_prev = 0; end
+if isempty(iq_prev); iq_prev = 0; end
 
-% ── 2. 符号関数（零交差でチャタリング抑制）────────
+% ── 1. 定数計算 ────────────────────────────────
+Vtd = Vdc * t_dead / Tsw;   % デッドタイム電圧 [V]
+k   = -2/3 * Vtd;           % 係数
+
+% ── 2. 符号関数（零交差ヒステリシス込み）───────────
 if abs(id) < I_eps
-    sgn_id = sign(id_prev);   % 前回値を保持しておくと良い
+    sgn_id = sign(id_prev);
 else
     sgn_id = sign(id);
 end
@@ -31,21 +33,18 @@ else
     sgn_iq = sign(iq);
 end
 
-% ── 3. 補正電圧 Δvd, Δvq 計算 ───────────────
+% ── 3. 補正電圧 Δvd, Δvq 計算 ───────────────────
 c = cos(theta_e);
 s = sin(theta_e);
 
 d_vd = k * ( sgn_id * c - sgn_iq * s );
 d_vq = k * ( sgn_id * s + sgn_iq * c );
 
-% ── 4. 指令電圧へ足し込み ──────────────────
+% ── 4. 指令電圧へ加算 ──────────────────────────
 vd_corr = vd_cmd + d_vd;
 vq_corr = vq_cmd + d_vq;
 
-% ── 5. 内部状態（符号）保持（persistent 例）───
-persistent id_prev iq_prev
-if isempty(id_prev); id_prev = 0; end
-if isempty(iq_prev); iq_prev = 0; end
+% ── 5. 符号を次回へ保持 ─────────────────────────
 id_prev = sgn_id;
 iq_prev = sgn_iq;
 end
