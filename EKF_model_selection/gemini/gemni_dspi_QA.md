@@ -211,3 +211,298 @@ EKFは、コントローラとモータモデル（プラント）の間に位�
 もし熱モデルでも精度が不足し、特に低速高トルク域でのトルク精度が厳しく要求される場合は、`Rs`と`Δφ`を同時に推定するEKFも選択肢となります。しかしその際は、可観測性が低い領域で推定を停止またはゲインを調整するなど、不安定化を防ぐための高度な対策が別途必要になります。
 
 まずは、**現在の`Δφ`推定EKFを完成させ、`Rs`は熱モデルで補償する**、という構成でシステムの性能を評価するのが最も現実的でリスクの少ない進め方です。
+
+
+はい、承知いたしました。微分インダクタンスマップの作成方法ですね。
+
+ご提示いただいた `id=map_id(fai_d, fai_q)`, `iq=map_iq(fai_d, fai_q)` は、磁束(`φ`)から電流(`i`)を求める**「逆方向のマップ」**です。
+
+一方、微分インダクタンス $L_{dd} = \partial \phi_d / \partial i_d$ などを計算するには、電流(`i`)から磁束(`φ`)を求める**「順方向のマップ」**が元データとして必要になります。
+
+---
+### ## 推奨される作成方法
+
+最も直接的で推奨される方法は、**順方向の磁束マップ**を準備することです。
+
+#### 準備すべきもの
+* **順方向の2次元LUT**:
+    * `fai_d = map_phid(id, iq)`
+    * `fai_q = map_phiq(id, iq)`
+
+おそらく実験計測データから逆方向マップを作成されているので、元データとしてはこの順方向の関係も取得できているかと思います。
+
+#### 作成手順
+この順方向マップがあれば、以前の議論の通り、各マップの勾配を**数値差分（有限差分法）**で計算することで、4種類の微分インダクタンスマップをオフラインで作成できます。
+
+1.  `map_phid(id, iq)` の `id` 方向の勾配を計算 → **`Ldd` マップ**
+    * $L_{dd}(i,j) \approx \dfrac{\phi_d(i+1, j) - \phi_d(i-1, j)}{i_d(i+1) - i_d(i-1)}$
+2.  `map_phid(id, iq)` の `iq` 方向の勾配を計算 → **`Ldq` マップ**
+3.  `map_phiq(id, iq)` の `id` 方向の勾配を計算 → **`Lqd` マップ**
+4.  `map_phiq(id, iq)` の `iq` 方向の勾配を計算 → **`Lqq` マップ**
+
+---
+### ## （代替案）逆方向マップから計算する方法
+
+もしどうしても順方向マップが利用できず、ご提示の逆方向マップしかない場合は、**逆関数の微分公式**を用いて数学的に計算することも可能です。
+
+#### 手順
+1.  **逆ヤコビ行列の計算**: まず、お持ちの逆方向マップを数値差分で微分し、ヤコビ行列 `J_iφ` を作成します。
+    $$
+    J_{i\phi} = \begin{bmatrix}
+    \partial i_d / \partial \phi_d & \partial i_d / \partial \phi_q \\
+    \partial i_q / \partial \phi_d & \partial i_q / \partial \phi_q
+    \end{bmatrix}
+    $$
+2.  **逆行列の計算**: 次に、マップの各点でこの2x2行列の**逆行列**を計算します。
+    $$
+    J_{\phi i} = (J_{i\phi})^{-1}
+    $$
+3.  **微分インダクタンスの取得**: この計算結果 `J_φi` が、目的の微分インダクタンス行列そのものです。
+    $$
+    J_{\phi i} = \begin{bmatrix} L_{dd} & L_{dq} \\ L_{qd} & L_{qq} \end{bmatrix}
+    $$
+
+💡 **注意**: この代替案は、逆行列計算を含むため数値的に不安定になりやすく、計算も複雑になります。**可能であれば、最初の「推奨される作成方法」で進めることを強くお勧めします。**
+
+
+%% ========================================================================
+%  実行サンプルセクション
+% =========================================================================
+
+% --- 1. サンプルの磁束マップを作成 ---
+% (実際には、この部分をFEM解析や実測で得たデータに置き換えてください)
+
+% 電流の格子ベクトルを定義
+id_vec = -200:20:0;     % d軸電流ベクトル [A]
+iq_vec = 0:20:300;      % q軸電流ベクトル [A]
+
+% グリッドを作成
+[Id_grid, Iq_grid] = meshgrid(id_vec, iq_vec);
+
+% IPMモータの簡易的な物理モデルで磁束マップを生成
+psi_f = 0.1;    % 永久磁石磁束 [Wb]
+Ld0 = 0.0003;   % d軸インダクタンス [H]
+Lq0 = 0.0005;   % q軸インダクタンス [H]
+
+% 簡易的な飽和を考慮 (実際はより複雑なLUTになります)
+phid_map = psi_f + Ld0 * Id_grid .* (1 - 0.2 * (Id_grid/max(abs(id_vec))).^2);
+phiq_map = Lq0 * Iq_grid .* (1 - 0.3 * (Iq_grid/max(iq_vec)).^2);
+
+
+% --- 2. 微分インダクタンスマップを計算 ---
+% 作成した関数を呼び出します
+[Ldd, Ldq, Lqd, Lqq] = create_diff_L_maps(id_vec, iq_vec, phid_map, phiq_map);
+
+
+% --- 3. 結果を可視化して確認 ---
+figure('Name', 'Differential Inductance Map Creation');
+
+% 元の磁束マップをプロット
+subplot(2, 2, 1);
+surf(Id_grid, Iq_grid, phid_map);
+title('\phi_d Map (Original)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('\phi_d [Wb]');
+
+% 計算されたLddマップをプロット
+subplot(2, 2, 2);
+surf(Id_grid, Iq_grid, Ldd);
+title('L_{dd} Map (Calculated)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('L_{dd} [H]');
+
+% 元の磁束マップをプロット
+subplot(2, 2, 3);
+surf(Id_grid, Iq_grid, phiq_map);
+title('\phi_q Map (Original)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('\phi_q [Wb]');
+
+% 計算されたLqqマップをプロット
+subplot(2, 2, 4);
+surf(Id_grid, Iq_grid, Lqq);
+title('L_{qq} Map (Calculated)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('L_{qq} [H]');
+
+%% ========================================================================
+%  微分インダクタンスマップ作成関数
+% =========================================================================
+function [Ldd, Ldq, Lqd, Lqq] = create_diff_L_maps(id_vec, iq_vec, phid_map, phiq_map)
+% CREATE_DIFF_L_MAPS は、順方向の磁束マップから微分インダクタンスマップを計算します。
+%
+% Inputs:
+%   id_vec      - d軸電流のベクトル (1 x M)
+%   iq_vec      - q軸電流のベクトル (1 x N)
+%   phid_map    - φdの2次元マップ (N x M)
+%   phiq_map    - φqの2次元マップ (N x M)
+%
+% Outputs:
+%   Ldd, Ldq, Lqd, Lqq - 計算された微分インダクタンスの2次元マップ (N x M)
+
+    % gradient関数は、[dF/dx, dF/dy] の順で勾配を返します。
+    % 今回のマップの次元は (iq, id) なので、
+    % y方向が iq, x方向が id に対応します。
+    %
+    % したがって、[dF/did, dF/diq] の順で出力されます。
+
+    % 1. φdマップからLddとLdqを計算
+    %    Ldd = d(φd)/d(id),  Ldq = d(φd)/d(iq)
+    [Ldd, Ldq] = gradient(phid_map, id_vec, iq_vec);
+
+    % 2. φqマップからLqdとLqqを計算
+    %    Lqd = d(φq)/d(id),  Lqq = d(φq)/d(iq)
+    [Lqd, Lqq] = gradient(phiq_map, id_vec, iq_vec);
+
+end
+---
+
+---
+### ## 2階微分マップの作成方法
+
+2階微分マップは、**1階微分マップを、もう一度数値微分する**ことで作成します。プロセスは1階微分マップの作成と全く同じです。
+
+#### 1. 概念（ヘシアン行列とは）
+`φd`のヘシアン行列 `Hd` は、以下のように定義される2x2の行列です。各要素が`φd`の2階偏微分になっています。
+
+$$
+H_d = \begin{bmatrix}
+\frac{\partial^2 \phi_d}{\partial i_d^2} & \frac{\partial^2 \phi_d}{\partial i_d \partial i_q} \\
+\frac{\partial^2 \phi_d}{\partial i_q \partial i_d} & \frac{\partial^2 \phi_d}{\partial i_q^2}
+\end{bmatrix}
+= \begin{bmatrix}
+\frac{\partial L_{dd}}{\partial i_d} & \frac{\partial L_{dd}}{\partial i_q} \\
+\frac{\partial L_{dq}}{\partial i_d} & \frac{\partial L_{dq}}{\partial i_q}
+\end{bmatrix}
+$$
+
+`φq`のヘシアン行列 `Hq` も同様に定義されます。
+
+#### 2. 作成手順
+この計算も、**オフライン**で一度だけ行います。
+
+1.  **準備**: まず、前回のスクリプトで作成した4つの1階微分マップ（`Ldd`, `Ldq`, `Lqd`, `Lqq`）を用意します。
+2.  **再度微分**: 1階微分マップのそれぞれに対して、`gradient`関数を適用して勾配を計算します。
+    * `Ldd`マップを微分 → `∂Ldd/∂id`, `∂Ldd/∂iq` を得る
+    * `Ldq`マップを微分 → `∂Ldq/∂id`, `∂Ldq/∂iq` を得る
+    * ... (Lqd, Lqqも同様) ...
+3.  **マップ作成**: 得られた勾配を組み合わせて、必要な2階微分マップを作成します。
+
+---
+### ## MATLABスクリプト
+
+前回のスクリプトに、2階微分マップを作成・可視化する機能を追加しました。
+`create_hessian_maps` という新しい関数を追加しています。
+
+```matlab
+%% ========================================================================
+%  実行サンプルセクション
+% =========================================================================
+
+% --- 1. サンプルの磁束マップを作成 ---
+id_vec = -200:20:0;
+iq_vec = 0:20:300;
+[Id_grid, Iq_grid] = meshgrid(id_vec, iq_vec);
+
+psi_f = 0.1;
+Ld0 = 0.0003;
+Lq0 = 0.0005;
+phid_map = psi_f + Ld0 * Id_grid .* (1 - 0.2 * (Id_grid/max(abs(id_vec))).^2);
+phiq_map = Lq0 * Iq_grid .* (1 - 0.3 * (Iq_grid/max(iq_vec)).^2);
+
+
+% --- 2. 1階微分インダクタンスマップを計算 ---
+[Ldd, Ldq, Lqd, Lqq] = create_diff_L_maps(id_vec, iq_vec, phid_map, phiq_map);
+
+
+% --- 3. 2階微分（ヘシアン）マップを計算 ---
+[phid_id_id, phid_id_iq, phid_iq_iq, ...
+ phiq_id_id, phiq_id_iq, phiq_iq_iq] = create_hessian_maps(id_vec, iq_vec, Ldd, Ldq, Lqd, Lqq);
+
+
+% --- 4. 結果を可視化して確認 ---
+figure('Name', 'Hessian Map Creation');
+
+% Lddマップをプロット
+subplot(2, 2, 1);
+surf(Id_grid, Iq_grid, Ldd);
+title('L_{dd} Map (1st derivative)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('L_{dd} [H]');
+
+% 計算された2階微分マップをプロット
+subplot(2, 2, 2);
+surf(Id_grid, Iq_grid, phid_id_id);
+title('\partial^2\phi_d / \partiali_d^2 Map (2nd derivative)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('[\cdot]');
+
+% Lqqマップをプロット
+subplot(2, 2, 3);
+surf(Id_grid, Iq_grid, Lqq);
+title('L_{qq} Map (1st derivative)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('L_{qq} [H]');
+
+% 計算された2階微分マップをプロット
+subplot(2, 2, 4);
+surf(Id_grid, Iq_grid, phiq_iq_iq);
+title('\partial^2\phi_q / \partiali_q^2 Map (2nd derivative)');
+xlabel('id [A]'); ylabel('iq [A]'); zlabel('[\cdot]');
+
+
+%% ========================================================================
+%  関数ライブラリ
+% =========================================================================
+
+function [Ldd, Ldq, Lqd, Lqq] = create_diff_L_maps(id_vec, iq_vec, phid_map, phiq_map)
+% 1階微分マップ作成関数（前回と同じ）
+    [Ldd, Ldq] = gradient(phid_map, id_vec, iq_vec);
+    [Lqd, Lqq] = gradient(phiq_map, id_vec, iq_vec);
+end
+
+function [phid_id_id, phid_id_iq, phid_iq_iq, ...
+          phiq_id_id, phiq_id_iq, phiq_iq_iq] = create_hessian_maps(id_vec, iq_vec, Ldd, Ldq, Lqd, Lqq)
+% CREATE_HESSIAN_MAPS は、1階微分マップから2階微分マップを計算します。
+%
+% Outputs:
+%   phid_id_id: d(Ldd)/did
+%   phid_id_iq: d(Ldd)/diq
+%   phid_iq_iq: d(Ldq)/diq
+%   ... (phi_qについても同様)
+
+    % φdの2階微分を計算
+    [phid_id_id, phid_id_iq] = gradient(Ldd, id_vec, iq_vec);
+    [~, phid_iq_iq]         = gradient(Ldq, id_vec, iq_vec); % d(Ldq)/did も計算されるが使わない
+
+    % φqの2階微分を計算
+    [phiq_id_id, phiq_id_iq] = gradient(Lqd, id_vec, iq_vec);
+    [~, phiq_iq_iq]         = gradient(Lqq, id_vec, iq_vec);
+
+    % NOTE: 理論上は d(Ldd)/diq = d(Ldq)/did (交差微分の順序交換) ですが、
+    % 元データや数値計算の誤差により、完全には一致しない場合があります。
+end
+```
+
+
+はい、その通りです。1階微分がインダクタンスであるのに対し、2階微分は\*\*「インダクタンスが、電流の変化によってどれだけ変化するか」**、つまり**磁気飽和の進行度合い\*\*を物理的に意味します。
+
+-----
+
+### \#\# 物理的な意味合い
+
+もう少し具体的に説明します。
+
+1.  **1階微分 = インダクタンス `L`**
+    `L = ∂φ/∂i` は、電流-磁束 (`i-φ`) グラフの\*\*「傾き」\*\*です。これは、ある動作点における局所的なインダクタンスそのものです。
+
+2.  **2階微分 = インダクタンスの変化率 `∂L/∂i`**
+    `∂²φ/∂i² = ∂L/∂i` は、インダクタンス-電流 (`L-i`) グラフの\*\*「傾き」\*\*を意味します。インダクタンスが一定（非飽和）であれば、この値は0になります。しかし、モータの鉄心は磁気飽和を起こすため、電流が増えるにつれてインダクタンスは変化（通常は低下）します。
+
+この2階微分の値によって、モータがどのような飽和状態にあるかを判断できます。
+
+| 2階微分の値 | 物理的な意味 | モータの状態 |
+| :--- | :--- | :--- |
+| **ほぼ 0** | 飽和の度合いがほとんど変化しない状態 | **線形領域**（飽和していない）\<br\>または**完全な飽和領域** |
+| **大きな負の値** | 飽和が最も急激に進んでいる状態 | 磁気飽和の\*\*「膝点 (Knee Point)」\*\*\<br\>（非線形性が最も強い領域） |
+
+-----
+
+### \#\# EKFにおける意味
+
+高度なEKFモデルがこの2階微分（ヘシアン行列）を必要とするのは、**モータの非線形性が最も顕著になる飽和の「膝点」付近でも、予測モデルの挙動をより正確に表現するため**です。
+
+インダクタンスが急激に変化する領域を正確に捉えることで、フィルタはより高精度な状態推定を実現できる、というわけです。
