@@ -1,5 +1,6 @@
 % function signature: Ld, Lqの代わりにΔφd, Δφqを出力
-function [delta_phi_d_est, delta_phi_q_est, P_diag, Id_est, Iq_est] = ekf_delta_phi_estimator(id_meas, iq_meas, vd, vq, omega)
+function [delta_phi_d_est, delta_phi_q_est, P_diag, Id_est, Iq_est] = ...
+     ekf_delta_phi_estimator(id_meas, iq_meas, vd, vq, omega)
 % EKF for Delta Phi Estimation
 
 % persistent変数の変更: x_estは4次元に
