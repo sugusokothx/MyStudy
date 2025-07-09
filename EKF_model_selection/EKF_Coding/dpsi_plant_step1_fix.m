@@ -118,3 +118,12 @@ function F = calculate_F_delta_phi(x, u, Rs, Ts, Ld_map, Lq_map, Ldd, Ldq, Lqd, 
     % 離散化: F = I + A*Ts (1次近似)
     F = eye(4) + A * Ts;
 end
+
+
+
+
+% P_est = (eye(4) - K*H)*P_pred; % ← 数値的に不安定な標準形式
+
+% Joseph形式による共分散更新 - 数値的に安定
+I_KH = eye(4) - K*H;
+P_est = I_KH * P_pred * I_KH.' + K * R * K.';
