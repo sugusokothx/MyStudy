@@ -67,20 +67,42 @@ F = calculate_F_delta_phi_analytic(x_est, u, Rs, Ts, ...
 % 予測誤差の共分散行列P_predを計算
 P_pred = F*P_est*F.' + Q;
 
-% ── 2) 更新ステップ ──────────────────────────────────────────────────
-% 観測ベクトルzを定義
+% % ── 2) 更新ステップ ──────────────────────────────────────────────────
+% % 観測ベクトルzを定義
+% z = [id_meas; iq_meas];
+
+% % 観測残差（イノベーション）yを計算
+% y = z - H*x_pred;
+
+% % 観測残差の共分散SとカルマンゲインKを計算
+% S = H*P_pred*H.' + R;
+% % K = P_pred*H.'/S;
+% K = P_pred * (H' / S);
+% % 状態xと共分散Pを更新
+% x_est = x_pred + K*y;
+% P_est = (eye(4) - K*H) * P_pred; % Joseph form for stability
+
+% --- 2) 更新ステップ ----------------------------------------------------
+% 観測ベクトル z
 z = [id_meas; iq_meas];
 
-% 観測残差（イノベーション）yを計算
+% イノベーション y とその共分散 S
 y = z - H*x_pred;
-
-% 観測残差の共分散SとカルマンゲインKを計算
 S = H*P_pred*H.' + R;
-% K = P_pred*H.'/S;
-K = P_pred * (H' / S);
-% 状態xと共分散Pを更新
+
+% カルマンゲイン K
+K = P_pred * (H' / S);     % 4×2
+
+% ▶▶ 共分散更新 ――― Joseph 形式に修正 ◀◀
+I4 = eye(4);
+P_est = (I4 - K*H) * P_pred * (I4 - K*H).' + K*R*K.';  % Joseph form
+
+% 状態推定更新
 x_est = x_pred + K*y;
-P_est = (eye(4) - K*H) * P_pred; % Joseph form for stability
+
+
+
+
 
 % ── 出力 ───────────────────────────────────────────────────────────
 dphi_d_est = x_est(3);
