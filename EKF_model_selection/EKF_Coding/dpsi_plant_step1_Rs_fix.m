@@ -51,7 +51,11 @@ S = H*P_pred*H.' + R;
 K = (P_pred*H.') / S;                   % Kalman gain
 
 x_est = x_pred + K*y;
-P_est = (eye(5) - K*H) * P_pred;
+% P_est = (eye(5) - K*H) * P_pred;
+% --- 共分散更新 (Joseph) ---
+I_KH  = eye(5) - K*H;
+P_est = I_KH * P_pred * I_KH.' + K * R * K.';
+
 
 % ── outputs ─────────────────────────────────────────────────────
 delta_phi_d_est = x_est(3);

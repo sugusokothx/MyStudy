@@ -63,9 +63,12 @@ y   = z - H*x_pred;                % innovation
 S = H*P_pred*H.' + R;
 K = (P_pred*H.') / S;   % バックスラッシュ(\)よりも読みやすい
 
-
 x_est = x_pred + K*y;
 P_est = (eye(4) - K*H)*P_pred;
+
+% --- 共分散更新 (Joseph) ---
+I_KH  = eye(5) - K*H;
+P_est = I_KH * P_pred * I_KH.' + K * R * K.';
 
 % ── outputs ─────────────────────────────────────────────────────
 delta_phi_d_est = x_est(3);
@@ -113,6 +116,8 @@ function F = calculate_F_delta_phi(x, u, Rs, Ts, Ld_map, Lq_map, Ldd, Ldq, Lqd, 
     
     A(2,1) = (-omega * Ldd) / Lq_map;
     A(2,2) = (-Rs - omega * Ldq) / Lq_map;
+    % A(2,2) = (-Rs - omega * Ldq) / Lq_map; 
+
     A(2,3) = -omega / Lq_map;
 
     % 離散化: F = I + A*Ts (1次近似)
