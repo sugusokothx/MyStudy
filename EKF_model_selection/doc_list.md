@@ -1,0 +1,3 @@
+https://www.researchgate.net/publication/224165713_A_New_Control_Method_for_Torque_Ripple_Compensation_of_Permanent_Magnet_Motors
+
+
