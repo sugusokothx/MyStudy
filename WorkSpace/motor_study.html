@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>インタラクティブで学ぶ！インバータによるモータ制御の基本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: A single-page, multi-section educational tool. It starts with an introduction, then addresses two key questions in dedicated interactive sections: 'Why 3-Phase AC?' and 'How is it made?'. The 'Why' section uses a canvas animation to contrast single-phase vs. three-phase for creating a rotating magnetic field. The 'How' section uses an interactive canvas diagram to explain PWM. This thematic, step-by-step structure with focused interactions is chosen to build understanding logically, making abstract electrical concepts tangible and easier to grasp for learners. -->
+    <!-- Visualization & Content Choices: 1. Rotating Field: Report Info -> Why 3-phase AC is needed. Goal -> Compare single vs. three-phase. Viz -> Canvas animation of stator coils and a magnetic field vector. Interaction -> Buttons to switch modes, showing single-phase oscillation vs. three-phase smooth rotation. Justification -> Visually proves the necessity of 3-phase for rotation. Library -> Custom Canvas API. 2. PWM Generation: Report Info -> How DC is converted to AC. Goal -> Explain the process of PWM. Viz -> Animated inverter circuit and a graph of PWM output. Interaction -> A slider controls the duty cycle, instantly updating the output voltage visualization. Justification -> Allows users to directly manipulate the core concept of PWM and see the immediate result, clarifying how switching creates an analog-like output. Library -> Custom Canvas API. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #FDFBF8;
+            color: #3f3c3a;
+        }
+        .content-card {
+            background-color: #FFFFFF;
+            border: 1px solid #EAE6E2;
+        }
+        .interactive-canvas {
+            border: 1px solid #D1CAC1;
+            background-color: #F9F7F5;
+        }
+        .control-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .control-btn.active {
+            background-color: #007A7A;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        .control-btn:not(.active) {
+            background-color: #EAE6E2;
+            color: #595450;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #007A7A;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .slider::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            background: #007A7A;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+        <header class="text-center mb-12">
+            <h1 class="text-3xl md:text-4xl font-bold text-[#005A5A] mb-2">インタラクティブで学ぶ！</h1>
+            <h2 class="text-2xl md:text-3xl font-bold text-[#3f3c3a]">インバータによるモータ制御の基本</h2>
+            <p class="mt-4 text-lg text-gray-600">モータを滑らかに、そして効率的に回す「インバータ」。その心臓部である「DC→AC変換」の謎を、対話形式で解き明かしましょう。</p>
+        </header>
+
+        <main class="space-y-12">
+            <section id="why-three-phase" class="content-card rounded-2xl shadow-lg p-6 md:p-8">
+                <h3 class="text-2xl font-bold text-[#005A5A] mb-4">1. なぜ「三相交流」に変換するのか？</h3>
+                <p class="mb-6 text-gray-700">モータを回す力は、磁石のS極とN極が引き合ったり反発したりする力です。モータの中の回転子（ロータ）も一種の磁石です。この磁石を滑らかに回転させるには、周囲の電磁石（ステータ）が生み出す磁界を「回転」させる必要があります。この「回転磁界」こそが、三相交流が必要な理由です。下の図で、単相と三相の違いを体験してみてください。</p>
+                
+                <div class="text-center mb-4">
+                    <button id="single-phase-btn" class="control-btn font-bold py-2 px-6 rounded-full mr-4">単相交流</button>
+                    <button id="three-phase-btn" class="control-btn font-bold py-2 px-6 rounded-full active">三相交流</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                    <div class="md:col-span-2">
+                        <canvas id="magnetic-field-canvas" class="interactive-canvas rounded-lg w-full aspect-square"></canvas>
+                    </div>
+                    <div class="md:col-span-1 flex flex-col justify-center h-full">
+                        <h4 id="animation-title" class="text-xl font-bold text-center mb-4">三相交流：滑らかな回転磁界</h4>
+                        <p id="animation-desc" class="text-sm text-gray-600 text-center">U相、V相、W相の3つの波が120度ずつずれて合成されることで、どの瞬間でも一定の強さを保ちながら、スムーズに回転する磁界が生まれます。これにより、ロータは滑らかに追従して回転することができます。</p>
+                        <div class="chart-container h-48 max-h-48 mt-4">
+                            <canvas id="phase-current-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="how-to-convert" class="content-card rounded-2xl shadow-lg p-6 md:p-8">
+                <h3 class="text-2xl font-bold text-[#005A5A] mb-4">2. どうやってDCを「三相交流」に変換するのか？</h3>
+                <p class="mb-6 text-gray-700">直流(DC)電源から、波のように変化する交流(AC)を作り出すのがインバータの役割です。インバータは、高速なスイッチング素子を巧みにON/OFFすることで、擬似的な交流電圧を生成します。この技術を<strong class="text-[#007A7A]">PWM（パルス幅変調）</strong>と呼びます。スライダーを動かして、スイッチのON時間の割合（デューティ比）が電圧にどう影響するか見てみましょう。</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div>
+                        <canvas id="pwm-canvas" class="interactive-canvas rounded-lg w-full aspect-video"></canvas>
+                    </div>
+                    <div class="flex flex-col justify-center">
+                        <label for="duty-cycle-slider" class="block text-lg font-bold mb-2">デューティ比 (ON時間の割合): <span id="duty-cycle-value" class="text-[#007A7A]">50</span>%</label>
+                        <input id="duty-cycle-slider" type="range" min="0" max="100" value="50" class="slider w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <p class="mt-4 text-gray-600">このデューティ比を正弦波（サインカーブ）の形に合わせて細かく変化させることで、滑らかな交流電流がモータに流れます。インバータはこれをU, V, Wの三相それぞれに対して、120度ずつタイミングをずらして行い、三相交流を生成しているのです。</p>
+                        <button id="animate-pwm-btn" class="mt-6 w-full md:w-auto bg-[#007A7A] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#005A5A] transition-colors duration-300">正弦波を生成するアニメーション</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="text-center mt-16 text-gray-500">
+            <p>&copy; 2025 Interactive Motor Control Explainer. All Rights Reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const FONT_COLOR = '#3f3c3a';
+            const GRID_COLOR = '#D1CAC1';
+            
+            // Section 1: Why Three-Phase AC?
+            const magneticCanvas = document.getElementById('magnetic-field-canvas');
+            const magCtx = magneticCanvas.getContext('2d');
+            const singlePhaseBtn = document.getElementById('single-phase-btn');
+            const threePhaseBtn = document.getElementById('three-phase-btn');
+            const animTitle = document.getElementById('animation-title');
+            const animDesc = document.getElementById('animation-desc');
+
+            let animationMode = 'three-phase';
+            let angle = 0;
+            const U_COLOR = 'rgba(239, 68, 68, 0.8)'; // red
+            const V_COLOR = 'rgba(34, 197, 94, 0.8)'; // green
+            const W_COLOR = 'rgba(59, 130, 246, 0.8)'; // blue
+            const VECTOR_COLOR = 'rgba(16, 185, 129, 1)';
+
+            function resizeCanvas(canvas) {
+                const { width, height } = canvas.getBoundingClientRect();
+                canvas.width = width * devicePixelRatio;
+                canvas.height = height * devicePixelRatio;
+                canvas.getContext('2d').scale(devicePixelRatio, devicePixelRatio);
+            }
+
+            resizeCanvas(magneticCanvas);
+            window.addEventListener('resize', () => resizeCanvas(magneticCanvas));
+
+            function drawMagneticField() {
+                const { width, height } = magneticCanvas.getBoundingClientRect();
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(width, height) * 0.35;
+                const coilRadius = Math.min(width, height) * 0.1;
+                
+                magCtx.clearRect(0, 0, width, height);
+                magCtx.strokeStyle = FONT_COLOR;
+                magCtx.lineWidth = 2;
+
+                const positions = {
+                    'U': { x: centerX, y: centerY - radius },
+                    'V': { x: centerX - radius * Math.sqrt(3) / 2, y: centerY + radius / 2 },
+                    'W': { x: centerX + radius * Math.sqrt(3) / 2, y: centerY + radius / 2 }
+                };
+
+                const u_val = Math.cos(angle);
+                const v_val = Math.cos(angle - 2 * Math.PI / 3);
+                const w_val = Math.cos(angle + 2 * Math.PI / 3);
+
+                function drawCoil(pos, label, value) {
+                    magCtx.beginPath();
+                    magCtx.arc(pos.x, pos.y, coilRadius, 0, 2 * Math.PI);
+                    const alpha = Math.abs(value);
+                    const color = label === 'U' ? U_COLOR.replace('0.8', alpha) : label === 'V' ? V_COLOR.replace('0.8', alpha) : W_COLOR.replace('0.8', alpha);
+                    magCtx.fillStyle = color;
+                    magCtx.fill();
+                    magCtx.stroke();
+                    magCtx.fillStyle = FONT_COLOR;
+                    magCtx.font = 'bold 16px Noto Sans JP';
+                    magCtx.textAlign = 'center';
+                    magCtx.textBaseline = 'middle';
+                    magCtx.fillText(label, pos.x, pos.y);
+                }
+
+                drawCoil(positions.U, 'U', u_val);
+                drawCoil(positions.V, 'V', v_val);
+                drawCoil(positions.W, 'W', w_val);
+                
+                magCtx.beginPath();
+                magCtx.arc(centerX, centerY, radius * 1.2, 0, 2 * Math.PI);
+                magCtx.setLineDash([5, 5]);
+                magCtx.strokeStyle = GRID_COLOR;
+                magCtx.stroke();
+                magCtx.setLineDash([]);
+                
+                let vectorX, vectorY;
+                const vectorMagnitude = radius * 0.8;
+
+                if (animationMode === 'three-phase') {
+                    const total_x = u_val * 1 + v_val * Math.cos(2 * Math.PI / 3) + w_val * Math.cos(4 * Math.PI / 3);
+                    const total_y = v_val * Math.sin(2 * Math.PI / 3) + w_val * Math.sin(4 * Math.PI / 3);
+                    
+                    vectorX = -total_y;
+                    vectorY = -total_x;
+                    
+                    const len = Math.sqrt(vectorX * vectorX + vectorY * vectorY);
+                    vectorX = (vectorX / len) * vectorMagnitude;
+                    vectorY = (vectorY / len) * vectorMagnitude;
+
+                } else {
+                    vectorX = 0;
+                    vectorY = -u_val * vectorMagnitude;
+                }
+
+                magCtx.beginPath();
+                magCtx.moveTo(centerX, centerY);
+                magCtx.lineTo(centerX + vectorX, centerY + vectorY);
+                magCtx.strokeStyle = 'black';
+                magCtx.lineWidth = 4;
+                magCtx.stroke();
+
+                magCtx.save();
+                magCtx.translate(centerX + vectorX, centerY + vectorY);
+                magCtx.rotate(Math.atan2(vectorY, vectorX) + Math.PI / 2);
+                magCtx.beginPath();
+                magCtx.moveTo(0, 0);
+                magCtx.lineTo(-6, -12);
+                magCtx.lineTo(6, -12);
+                magCtx.closePath();
+                magCtx.fillStyle = 'black';
+                magCtx.fill();
+                magCtx.restore();
+            }
+
+            singlePhaseBtn.addEventListener('click', () => {
+                animationMode = 'single-phase';
+                singlePhaseBtn.classList.add('active');
+                threePhaseBtn.classList.remove('active');
+                animTitle.textContent = '単相交流：往復する磁界';
+                animDesc.textContent = 'U相のみが変化するため、磁界は上下に振動するだけです。これではロータを一方向に安定して回転させることはできません。';
+                updatePhaseChartData();
+            });
+
+            threePhaseBtn.addEventListener('click', () => {
+                animationMode = 'three-phase';
+                threePhaseBtn.classList.add('active');
+                singlePhaseBtn.classList.remove('active');
+                animTitle.textContent = '三相交流：滑らかな回転磁界';
+                animDesc.textContent = 'U相、V相、W相の3つの波が120度ずつずれて合成されることで、どの瞬間でも一定の強さを保ちながら、スムーズに回転する磁界が生まれます。';
+                updatePhaseChartData();
+            });
+
+            function animateMagField() {
+                angle += 0.02;
+                if (angle > 2 * Math.PI) angle -= 2 * Math.PI;
+                drawMagneticField();
+                updatePhaseChartIndicator();
+                requestAnimationFrame(animateMagField);
+            }
+
+            const phaseChartCanvas = document.getElementById('phase-current-chart');
+            const phaseChart = new Chart(phaseChartCanvas, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 100}, (_, i) => i),
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: -1.5, max: 1.5 }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false },
+                        annotation: {
+                            annotations: {
+                                line1: {
+                                    type: 'line',
+                                    scaleID: 'x',
+                                    value: 0,
+                                    borderColor: 'black',
+                                    borderWidth: 2
+                                }
+                            }
+                        }
+                    },
+                    elements: { point: { radius: 0 } },
+                    animation: false
+                }
+            });
+            
+            function updatePhaseChartData() {
+                const labels = Array.from({length: 100}, (_, i) => i);
+                const uData = labels.map(i => Math.cos(i / 100 * 2 * Math.PI));
+                const vData = labels.map(i => Math.cos(i / 100 * 2 * Math.PI - 2 * Math.PI / 3));
+                const wData = labels.map(i => Math.cos(i / 100 * 2 * Math.PI + 2 * Math.PI / 3));
+
+                if (animationMode === 'three-phase') {
+                    phaseChart.data.datasets = [
+                        { label: 'U', data: uData, borderColor: U_COLOR, borderWidth: 2, fill: false },
+                        { label: 'V', data: vData, borderColor: V_COLOR, borderWidth: 2, fill: false },
+                        { label: 'W', data: wData, borderColor: W_COLOR, borderWidth: 2, fill: false }
+                    ];
+                } else {
+                     phaseChart.data.datasets = [
+                        { label: 'U', data: uData, borderColor: U_COLOR, borderWidth: 2, fill: false }
+                    ];
+                }
+                phaseChart.update();
+            }
+
+            function updatePhaseChartIndicator() {
+                const chartX = (angle / (2 * Math.PI)) * 100;
+                phaseChart.options.plugins.annotation.annotations.line1.value = chartX;
+                phaseChart.update();
+            }
+
+            updatePhaseChartData();
+            animateMagField();
+
+            // Section 2: How to Convert?
+            const pwmCanvas = document.getElementById('pwm-canvas');
+            const pwmCtx = pwmCanvas.getContext('2d');
+            const dutySlider = document.getElementById('duty-cycle-slider');
+            const dutyValueSpan = document.getElementById('duty-cycle-value');
+            const animatePwmBtn = document.getElementById('animate-pwm-btn');
+
+            let dutyCycle = 0.5;
+            let pwmAnimationAngle = 0;
+            let isPwmAnimating = false;
+
+            resizeCanvas(pwmCanvas);
+            window.addEventListener('resize', () => resizeCanvas(pwmCanvas));
+
+            function drawPWM() {
+                const { width, height } = pwmCanvas.getBoundingClientRect();
+                pwmCtx.clearRect(0, 0, width, height);
+
+                const Vdc = height * 0.3;
+                const zeroLine = height * 0.65;
+                const padding = 20;
+                const graphWidth = width - 2 * padding;
+
+                pwmCtx.strokeStyle = GRID_COLOR;
+                pwmCtx.lineWidth = 1;
+                pwmCtx.beginPath();
+                pwmCtx.moveTo(padding, zeroLine);
+                pwmCtx.lineTo(width - padding, zeroLine);
+                pwmCtx.stroke();
+                
+                pwmCtx.fillStyle = FONT_COLOR;
+                pwmCtx.font = '12px Noto Sans JP';
+                pwmCtx.fillText('+Vdc', padding, zeroLine - Vdc - 5);
+                pwmCtx.fillText('0V', padding, zeroLine + 15);
+                
+                if (isPwmAnimating) {
+                    pwmCtx.strokeStyle = 'rgba(59, 130, 246, 0.5)';
+                    pwmCtx.lineWidth = 2;
+                    pwmCtx.beginPath();
+                    pwmCtx.moveTo(padding, zeroLine);
+                    for (let i = 0; i < graphWidth; i++) {
+                        const x_angle = (i / graphWidth) * 2 * Math.PI;
+                        const sinValue = Math.sin(x_angle + pwmAnimationAngle);
+                        const y = zeroLine - (sinValue * Vdc * 0.8);
+                        pwmCtx.lineTo(padding + i, y);
+                    }
+                    pwmCtx.stroke();
+                }
+
+                pwmCtx.strokeStyle = U_COLOR;
+                pwmCtx.lineWidth = 2;
+                pwmCtx.beginPath();
+                let lastY = zeroLine;
+                pwmCtx.moveTo(padding, zeroLine);
+                const pulses = 20;
+                for (let i = 0; i < pulses; i++) {
+                    const currentDuty = isPwmAnimating ? (1 + Math.sin((i/pulses) * 2 * Math.PI + pwmAnimationAngle)) / 2 : dutyCycle;
+                    
+                    const startX = padding + (i / pulses) * graphWidth;
+                    const endX = padding + ((i + currentDuty) / pulses) * graphWidth;
+                    const nextStartX = padding + ((i + 1) / pulses) * graphWidth;
+                    
+                    if (lastY === zeroLine) {
+                        pwmCtx.lineTo(startX, zeroLine);
+                        pwmCtx.lineTo(startX, zeroLine - Vdc);
+                    }
+                    pwmCtx.lineTo(endX, zeroLine - Vdc);
+                    pwmCtx.lineTo(endX, zeroLine);
+                    pwmCtx.lineTo(nextStartX, zeroLine);
+                    lastY = zeroLine;
+                }
+                pwmCtx.stroke();
+                
+                pwmCtx.lineWidth = 4;
+                pwmCtx.strokeStyle = '#007A7A';
+                const avgVoltage = zeroLine - (Vdc * dutyCycle);
+                
+                if(!isPwmAnimating){
+                    pwmCtx.beginPath();
+                    pwmCtx.moveTo(padding, avgVoltage);
+                    pwmCtx.lineTo(width-padding, avgVoltage);
+                    pwmCtx.stroke();
+                    pwmCtx.fillStyle = '#007A7A';
+                    pwmCtx.font = 'bold 14px Noto Sans JP';
+                    pwmCtx.textAlign = 'right';
+                    pwmCtx.fillText(`平均電圧`, width-padding, avgVoltage - 10);
+                }
+            }
+
+            dutySlider.addEventListener('input', (e) => {
+                if (isPwmAnimating) {
+                    isPwmAnimating = false;
+                    animatePwmBtn.textContent = '正弦波を生成するアニメーション';
+                }
+                dutyCycle = e.target.value / 100;
+                dutyValueSpan.textContent = e.target.value;
+                drawPWM();
+            });
+            
+            animatePwmBtn.addEventListener('click', () => {
+                isPwmAnimating = !isPwmAnimating;
+                if(isPwmAnimating) {
+                    animatePwmBtn.textContent = 'アニメーションを停止';
+                    animatePWMWave();
+                } else {
+                    animatePwmBtn.textContent = '正弦波を生成するアニメーション';
+                    dutyCycle = 0.5;
+                    dutySlider.value = 50;
+                    dutyValueSpan.textContent = 50;
+                    drawPWM();
+                }
+            });
+            
+            function animatePWMWave(){
+                if(!isPwmAnimating) return;
+                pwmAnimationAngle += 0.05;
+                if (pwmAnimationAngle > 2 * Math.PI) pwmAnimationAngle -= 2 * Math.PI;
+                dutyCycle = (1 + Math.sin(pwmAnimationAngle + Math.PI/2)) / 2; // update slider pos
+                dutySlider.value = Math.round(dutyCycle * 100);
+                dutyValueSpan.textContent = Math.round(dutyCycle * 100);
+                
+                drawPWM();
+                requestAnimationFrame(animatePWMWave);
+            }
+            
+            drawPWM();
+
+        });
+    </script>
+</body>
+</html>
