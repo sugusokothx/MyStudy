@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>インタラクティブで学ぶ！インバータによるモータ制御の基本</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    body{font-family:'Noto Sans JP',sans-serif;background:#FDFBF8;color:#3f3c3a}
+    .content-card{background:#FFF;border:1px solid #EAE6E2}
+    .interactive-canvas{border:1px solid #D1CAC1;background:#F9F7F5}
+    .control-btn{transition:all .2s ease-in-out}
+    .control-btn.active{background:#007A7A;color:#fff;box-shadow:0 2px 4px rgba(0,0,0,.1);transform:translateY(-2px)}
+    .control-btn:not(.active){background:#EAE6E2;color:#595450}
+    .slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;background:#007A7A;cursor:pointer;border-radius:50%}
+    .slider::-moz-range-thumb{width:24px;height:24px;background:#007A7A;cursor:pointer;border-radius:50%}
+    .chart-container{position:relative;width:100%;max-width:600px;margin-left:auto;margin-right:auto}
+  </style>
+</head>
+<body class="antialiased">
+  <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+    <header class="text-center mb-12">
+      <h1 class="text-3xl md:text-4xl font-bold text-[#005A5A] mb-2">インタラクティブで学ぶ！</h1>
+      <h2 class="text-2xl md:text-3xl font-bold text-[#3f3c3a]">インバータによるモータ制御の基本</h2>
+      <p class="mt-4 text-lg text-gray-600">モータを滑らかに、そして効率的に回す「インバータ」。その心臓部である「DC→AC変換」の謎を、対話形式で解き明かしましょう。</p>
+    </header>
+
+    <main class="space-y-12">
+      <section id="why-three-phase" class="content-card rounded-2xl shadow-lg p-6 md:p-8">
+        <h3 class="text-2xl font-bold text-[#005A5A] mb-4">1. なぜ「三相交流」に変換するのか？</h3>
+        <p class="mb-6 text-gray-700">モータを回す力は、磁石のS極とN極が引き合う力です。モータを滑らかに回転させるには、周囲の電磁石（ステータ）が生み出す磁界を「回転」させる必要があります。この「回転磁界」は、インバータの6つのスイッチが巧みにON/OFFすることで生成されます。下の図で、単相と三相の違い、そしてスイッチの動きとの関係を体験してみてください。</p>
+
+        <div class="text-center mb-4">
+          <button id="single-phase-btn" class="control-btn font-bold py-2 px-6 rounded-full mr-4">単相交流</button>
+          <button id="three-phase-btn" class="control-btn font-bold py-2 px-6 rounded-full active">三相交流</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+          <div>
+            <canvas id="magnetic-field-canvas" class="interactive-canvas rounded-lg w-full aspect-square"></canvas>
+          </div>
+          <div class="flex flex-col justify-center h-full space-y-4">
+            <h4 id="animation-title" class="text-xl font-bold text-center">三相交流：滑らかな回転磁界</h4>
+            <p id="animation-desc" class="text-sm text-gray-600 text-center px-2">U, V, W相の電流に応じてインバータのスイッチがON/OFFし、合成された磁界（黒矢印）が滑らかに回転します。</p>
+            <canvas id="inverter-canvas" class="interactive-canvas rounded-lg w-full aspect-[4/3]"></canvas>
+            <div class="chart-container h-32">
+              <canvas id="phase-current-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="how-to-convert" class="content-card rounded-2xl shadow-lg p-6 md:p-8">
+        <h3 class="text-2xl font-bold text-[#005A5A] mb-4">2. どうやってDCを「三相交流」に変換するのか？</h3>
+        <p class="mb-6 text-gray-700">直流(DC)電源から、波のように変化する交流(AC)を作り出すのがインバータの役割です。インバータは、高速なスイッチング素子を巧みにON/OFFすることで、擬似的な交流電圧を生成します。この技術を<strong class="text-[#007A7A]">PWM（パルス幅変調）</strong>と呼びます。スライダーを動かして、スイッチのON時間の割合（デューティ比）が電圧にどう影響するか見てみましょう。</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          <div>
+            <canvas id="pwm-canvas" class="interactive-canvas rounded-lg w-full aspect-video"></canvas>
+          </div>
+          <div class="flex flex-col justify-center">
+            <label for="duty-cycle-slider" class="block text-lg font-bold mb-2">デューティ比 (ON時間の割合): <span id="duty-cycle-value" class="text-[#007A7A]">50</span>%</label>
+            <input id="duty-cycle-slider" type="range" min="0" max="100" value="50" class="slider w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer"/>
+            <p class="mt-4 text-gray-600">このデューティ比を正弦波（サインカーブ）の形に合わせて細かく変化させることで、滑らかな交流電流がモータに流れます。インバータはこれをU, V, Wの三相それぞれに対して、120度ずつタイミングをずらして行い、三相交流を生成しているのです。</p>
+            <button id="animate-pwm-btn" class="mt-6 w-full md:w-auto bg-[#007A7A] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#005A5A] transition-colors duration-300">正弦波を生成するアニメーション</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="text-center mt-16 text-gray-500">
+      <p>&copy; 2025 Interactive Motor Control Explainer. All Rights Reserved.</p>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // --- constants ---
+      const FONT_COLOR = '#3f3c3a';
+      const GRID_COLOR = '#D1CAC1';
+      const U_COLOR = 'rgba(239, 68, 68, 1)';   // red
+      const V_COLOR = 'rgba(34, 197, 94, 1)';   // green
+      const W_COLOR = 'rgba(59, 130, 246, 1)';  // blue
+      const SWITCH_ON_COLOR = '#22c55e';        // bright green
+      const SWITCH_OFF_COLOR = '#EAE6E2';
+      const DPR = window.devicePixelRatio || 1;
+
+      // Chart.js plugin registration (annotation)
+      if (window['chartjs-plugin-annotation']) {
+        Chart.register(window['chartjs-plugin-annotation']);
+      }
+
+      // --- elements ---
+      const magneticCanvas = document.getElementById('magnetic-field-canvas');
+      const magCtx = magneticCanvas.getContext('2d');
+
+      const inverterCanvas = document.getElementById('inverter-canvas');
+      const invCtx = inverterCanvas.getContext('2d');
+
+      const singlePhaseBtn = document.getElementById('single-phase-btn');
+      const threePhaseBtn  = document.getElementById('three-phase-btn');
+      const animTitle = document.getElementById('animation-title');
+      const animDesc  = document.getElementById('animation-desc');
+
+      const phaseChartCanvas = document.getElementById('phase-current-chart');
+
+      const pwmCanvas = document.getElementById('pwm-canvas');
+      const pwmCtx = pwmCanvas.getContext('2d');
+      const dutySlider = document.getElementById('duty-cycle-slider');
+      const dutyValueSpan = document.getElementById('duty-cycle-value');
+      const animatePwmBtn = document.getElementById('animate-pwm-btn');
+
+      // --- states ---
+      let animationMode = 'three-phase';
+      let angle = 0;
+      let u_val = 0, v_val = 0, w_val = 0;
+
+      // --- helpers ---
+      function setupHiDPICanvas(canvas, ctx){
+        const rect = canvas.getBoundingClientRect();
+        canvas.width  = Math.max(1, Math.floor(rect.width  * DPR));
+        canvas.height = Math.max(1, Math.floor(rect.height * DPR));
+        ctx.setTransform(1,0,0,1,0,0);     // reset any existing transform
+        ctx.scale(DPR, DPR);                // scale drawing to CSS pixels
+      }
+
+      function resizeAllCanvases(){
+        [ [magneticCanvas, magCtx],
+          [inverterCanvas, invCtx],
+          [pwmCanvas, pwmCtx] ].forEach(([c,ctx]) => setupHiDPICanvas(c, ctx));
+
+        // redraw after resize
+        drawMagneticField();
+        drawInverter();
+        drawPWM();
+      }
+
+      window.addEventListener('resize', resizeAllCanvases);
+
+      // --- phase chart (x: linear 0..100 for smooth indicator line) ---
+      const labels = Array.from({length: 101}, (_,i)=>i);
+      const phaseChart = new Chart(phaseChartCanvas, {
+        type: 'line',
+        data: { datasets: [] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          parsing: false, // we provide {x,y}
+          scales: {
+            x: { type:'linear', min:0, max:100, display:false },
+            y: { min:-1.5, max:1.5, display:false }
+          },
+          plugins: {
+            legend: { display:false },
+            tooltip: { enabled:false },
+            annotation: {
+              annotations: {
+                cursor: {
+                  type: 'line',
+                  xMin: 0, xMax: 0,
+                  borderColor: 'black',
+                  borderWidth: 2
+                }
+              }
+            }
+          },
+          elements: { point: { radius:0 } },
+          animation: false
+        }
+      });
+
+      function seriesFrom(fn){
+        return labels.map(x => ({ x, y: fn(x/100*2*Math.PI) }));
+      }
+
+      function updatePhaseChartData(){
+        const uData = seriesFrom(t => Math.cos(t));
+        const vData = seriesFrom(t => Math.cos(t - 2*Math.PI/3));
+        const wData = seriesFrom(t => Math.cos(t + 2*Math.PI/3));
+
+        if (animationMode === 'three-phase') {
+          phaseChart.data.datasets = [
+            { label:'U', data:uData, borderColor:U_COLOR, borderWidth:2 },
+            { label:'V', data:vData, borderColor:V_COLOR, borderWidth:2 },
+            { label:'W', data:wData, borderColor:W_COLOR, borderWidth:2 }
+          ];
+        } else {
+          phaseChart.data.datasets = [
+            { label:'U', data:uData, borderColor:U_COLOR, borderWidth:2 }
+          ];
+        }
+        phaseChart.update();
+      }
+
+      function updatePhaseChartIndicator(){
+        const chartX = (angle / (2*Math.PI)) * 100; // 0..100
+        if (phaseChart?.options?.plugins?.annotation?.annotations?.cursor){
+          phaseChart.options.plugins.annotation.annotations.cursor.xMin = chartX;
+          phaseChart.options.plugins.annotation.annotations.cursor.xMax = chartX;
+          phaseChart.update();
+        }
+      }
+
+      // --- magnetic field (Clarke αβ 合成ベクトル) ---
+      function drawMagneticField(){
+        const { width, height } = magneticCanvas.getBoundingClientRect();
+        const cx = width/2, cy = height/2;
+        const radius = Math.min(width, height) * 0.35;
+        const coilR  = Math.min(width, height) * 0.10;
+
+        // phase currents
+        u_val = Math.cos(angle);
+        v_val = (animationMode === 'three-phase') ? Math.cos(angle - 2*Math.PI/3) : 0;
+        w_val = (animationMode === 'three-phase') ? Math.cos(angle + 2*Math.PI/3) : 0;
+
+        // clear
+        magCtx.clearRect(0,0,width,height);
+
+        // coil positions (equilateral triangle)
+        const pos = {
+          U: { x: cx, y: cy - radius },
+          V: { x: cx - radius*Math.sqrt(3)/2, y: cy + radius/2 },
+          W: { x: cx + radius*Math.sqrt(3)/2, y: cy + radius/2 }
+        };
+
+        function drawCoil(p, label, value, color){
+          magCtx.beginPath();
+          magCtx.arc(p.x, p.y, coilR, 0, Math.PI*2);
+          const alpha = Math.min(1, Math.abs(value));
+          magCtx.fillStyle = color.replace(/, 1\)$/, `, ${alpha})`);
+          magCtx.fill();
+          magCtx.strokeStyle = FONT_COLOR;
+          magCtx.lineWidth = 2;
+          magCtx.stroke();
+
+          magCtx.fillStyle = FONT_COLOR;
+          magCtx.font = 'bold 16px Noto Sans JP';
+          magCtx.textAlign = 'center';
+          magCtx.textBaseline = 'middle';
+          magCtx.fillText(label, p.x, p.y);
+        }
+
+        drawCoil(pos.U, 'U', u_val, U_COLOR);
+        drawCoil(pos.V, 'V', v_val, V_COLOR);
+        drawCoil(pos.W, 'W', w_val, W_COLOR);
+
+        // dashed stator circle
+        magCtx.beginPath();
+        magCtx.setLineDash([5,5]);
+        magCtx.strokeStyle = GRID_COLOR;
+        magCtx.arc(cx, cy, radius*1.2, 0, Math.PI*2);
+        magCtx.stroke();
+        magCtx.setLineDash([]);
+
+        // Clarke transform (αβ)
+        const ia = u_val, ib = v_val, ic = w_val;
+        const alpha = (2/3) * (ia - 0.5*(ib + ic));
+        const beta  = (2/3) * ((Math.sqrt(3)/2) * (ib - ic));
+
+        const scale = radius*0.9;
+        const vx = alpha * scale;
+        const vy = -beta  * scale; // canvas y is down
+
+        // vector
+        magCtx.beginPath();
+        magCtx.moveTo(cx, cy);
+        magCtx.lineTo(cx + vx, cy + vy);
+        magCtx.strokeStyle = '#000';
+        magCtx.lineWidth = 4;
+        magCtx.stroke();
+
+        // arrow head
+        magCtx.save();
+        magCtx.translate(cx + vx, cy + vy);
+        magCtx.rotate(Math.atan2(vy, vx));
+        magCtx.beginPath();
+        magCtx.moveTo(0,0);
+        magCtx.lineTo(-10,-6);
+        magCtx.lineTo(-10, 6);
+        magCtx.closePath();
+        magCtx.fillStyle = '#000';
+        magCtx.fill();
+        magCtx.restore();
+      }
+
+      // --- inverter schematic ---
+      function drawInverter(){
+        const { width, height } = inverterCanvas.getBoundingClientRect();
+        invCtx.clearRect(0,0,width,height);
+
+        const swW = width * 0.15;
+        const swH = height * 0.10;
+        const gap = height * 0.10;
+        const legGap = width * 0.25;
+
+        const xU = width * 0.18;
+        const xV = xU + legGap;
+        const xW = xV + legGap;
+
+        const yTop = height * 0.20;
+        const yBot = yTop + swH + gap;
+        const yMotor = height * 0.82;
+
+        // DC bus lines
+        invCtx.lineWidth = 4;
+        invCtx.strokeStyle = FONT_COLOR;
+        invCtx.beginPath();
+        invCtx.moveTo(width*0.08, yTop - swH/2);
+        invCtx.lineTo(width*0.92, yTop - swH/2);
+        invCtx.moveTo(width*0.08, yBot + swH*1.5);
+        invCtx.lineTo(width*0.92, yBot + swH*1.5);
+        invCtx.stroke();
+
+        invCtx.font = 'bold 14px Noto Sans JP';
+        invCtx.fillStyle = FONT_COLOR;
+        invCtx.fillText('DC+', width*0.03, yTop - swH/2 + 5);
+        invCtx.fillText('DC-', width*0.03, yBot + swH*1.5 + 5);
+
+        function legValue(label){
+          if(label==='U') return u_val;
+          if(label==='V') return v_val;
+          return w_val;
+        }
+
+        function drawLeg(x, label, activeColor){
+          const val = legValue(label);
+          const active = (animationMode==='three-phase' || label==='U'); // 単相時はUのみ動作
+
+          // vertical wires & phase node
+          invCtx.lineWidth = 2;
+          invCtx.strokeStyle = FONT_COLOR;
+          invCtx.beginPath();
+          // top bus down to top switch
+          invCtx.moveTo(x + swW/2, yTop - swH/2);
+          invCtx.lineTo(x + swW/2, yTop);
+          // mid wire
+          invCtx.moveTo(x + swW/2, yTop + swH);
+          invCtx.lineTo(x + swW/2, yBot);
+          // bottom switch to bottom bus
+          invCtx.moveTo(x + swW/2, yBot + swH);
+          invCtx.lineTo(x + swW/2, yBot + swH*1.5);
+          // phase output to motor
+          invCtx.moveTo(x + swW/2, yTop + swH + gap/2);
+          invCtx.lineTo(x + swW/2, yMotor);
+          invCtx.stroke();
+
+          // Switch rectangles
+          const upperOn = active && (val >= 0);
+          const lowerOn = active && (val < 0);
+
+          invCtx.strokeStyle = '#888';
+          invCtx.lineWidth = 1;
+
+          // Upper
+          invCtx.fillStyle = upperOn ? SWITCH_ON_COLOR : SWITCH_OFF_COLOR;
+          invCtx.fillRect(x, yTop, swW, swH);
+          invCtx.strokeRect(x, yTop, swW, swH);
+
+          // Lower
+          invCtx.fillStyle = lowerOn ? SWITCH_ON_COLOR : SWITCH_OFF_COLOR;
+          invCtx.fillRect(x, yBot, swW, swH);
+          invCtx.strokeRect(x, yBot, swW, swH);
+
+          // Label
+          invCtx.fillStyle = FONT_COLOR;
+          invCtx.font = 'bold 16px Noto Sans JP';
+          invCtx.textAlign = 'center';
+          invCtx.fillText(label, x + swW/2, yMotor + 20);
+        }
+
+        drawLeg(xU, 'U', U_COLOR);
+        drawLeg(xV, 'V', V_COLOR);
+        drawLeg(xW, 'W', W_COLOR);
+      }
+
+      // --- controls ---
+      singlePhaseBtn.addEventListener('click', () => {
+        animationMode = 'single-phase';
+        singlePhaseBtn.classList.add('active');
+        threePhaseBtn.classList.remove('active');
+        animTitle.textContent = '単相交流：往復する磁界';
+        animDesc.innerHTML = 'U相の電流だけが変化し、インバータのU相スイッチだけが動作します。磁界は上下に振動するだけで回転しません。';
+        updatePhaseChartData();
+      });
+
+      threePhaseBtn.addEventListener('click', () => {
+        animationMode = 'three-phase';
+        threePhaseBtn.classList.add('active');
+        singlePhaseBtn.classList.remove('active');
+        animTitle.textContent = '三相交流：滑らかな回転磁界';
+        animDesc.innerHTML = 'U, V, W相の電流に応じてインバータのスイッチがON/OFFし、合成された磁界（黒矢印）が滑らかに回転します。';
+        updatePhaseChartData();
+      });
+
+      // --- animation loop (magnetic field + inverter + chart cursor) ---
+      function animateMagField(){
+        angle += 0.02;
+        if (angle > 2*Math.PI) angle -= 2*Math.PI;
+        drawMagneticField();
+        drawInverter();
+        updatePhaseChartIndicator();
+        requestAnimationFrame(animateMagField);
+      }
+
+      // --- PWM demo ---
+      let dutyCycle = 0.5;
+      let pwmAnimationAngle = 0;
+      let isPwmAnimating = false;
+
+      function drawPWM(){
+        const { width, height } = pwmCanvas.getBoundingClientRect();
+        pwmCtx.clearRect(0,0,width,height);
+
+        const Vdc = height * 0.30;
+        const zeroLine = height * 0.65;
+        const pad = 20;
+        const gW = width - 2*pad;
+
+        // 0V line
+        pwmCtx.strokeStyle = GRID_COLOR;
+        pwmCtx.lineWidth = 1;
+        pwmCtx.beginPath();
+        pwmCtx.moveTo(pad, zeroLine);
+        pwmCtx.lineTo(width - pad, zeroLine);
+        pwmCtx.stroke();
+
+        // labels
+        pwmCtx.fillStyle = FONT_COLOR;
+        pwmCtx.font = '12px Noto Sans JP';
+        pwmCtx.fillText('+Vdc', pad, zeroLine - Vdc - 5);
+        pwmCtx.fillText('0V',   pad, zeroLine + 15);
+
+        // reference sine (when animating)
+        if (isPwmAnimating){
+          pwmCtx.strokeStyle = 'rgba(59,130,246,0.5)';
+          pwmCtx.lineWidth = 2;
+          pwmCtx.beginPath();
+          pwmCtx.moveTo(pad, zeroLine);
+          for(let i=0;i<=gW;i++){
+            const xang = (i/gW)*2*Math.PI;
+            const s = Math.sin(xang + pwmAnimationAngle);
+            const y = zeroLine - (s * Vdc * 0.8);
+            pwmCtx.lineTo(pad + i, y);
+          }
+          pwmCtx.stroke();
+        }
+
+        // PWM pulses
+        pwmCtx.strokeStyle = U_COLOR;
+        pwmCtx.lineWidth = 2;
+        pwmCtx.beginPath();
+        const pulses = 20;
+        let lastHigh = false;
+        let x = pad;
+
+        for(let i=0;i<pulses;i++){
+          const duty = isPwmAnimating
+            ? (1 + Math.sin((i/pulses)*2*Math.PI + pwmAnimationAngle + Math.PI/2))/2
+            : dutyCycle;
+
+          const startX = pad + (i/pulses)*gW;
+          const highEnd = pad + ((i + duty)/pulses)*gW;
+          const endX = pad + ((i+1)/pulses)*gW;
+
+          // low segment up to rising edge
+          pwmCtx.moveTo(startX, lastHigh ? zeroLine - Vdc : zeroLine);
+          pwmCtx.lineTo(startX, zeroLine - Vdc); // rising
+          pwmCtx.lineTo(highEnd, zeroLine - Vdc); // high
+          pwmCtx.lineTo(highEnd, zeroLine); // falling
+          pwmCtx.lineTo(endX, zeroLine); // low
+          lastHigh = false;
+          x = endX;
+        }
+        pwmCtx.stroke();
+
+        // average voltage line (static mode only)
+        if(!isPwmAnimating){
+          pwmCtx.lineWidth = 4;
+          pwmCtx.strokeStyle = '#007A7A';
+          const avgY = zeroLine - (Vdc * dutyCycle);
+          pwmCtx.beginPath();
+          pwmCtx.moveTo(pad, avgY);
+          pwmCtx.lineTo(width - pad, avgY);
+          pwmCtx.stroke();
+          pwmCtx.fillStyle = '#007A7A';
+          pwmCtx.font = 'bold 14px Noto Sans JP';
+          pwmCtx.textAlign = 'right';
+          pwmCtx.fillText('平均電圧', width - pad, avgY - 10);
+        }
+      }
+
+      dutySlider.addEventListener('input', (e)=>{
+        if (isPwmAnimating){
+          isPwmAnimating = false;
+          animatePwmBtn.textContent = '正弦波を生成するアニメーション';
+        }
+        dutyCycle = e.target.value/100;
+        dutyValueSpan.textContent = e.target.value;
+        drawPWM();
+      });
+
+      animatePwmBtn.addEventListener('click', ()=>{
+        isPwmAnimating = !isPwmAnimating;
+        if (isPwmAnimating){
+          animatePwmBtn.textContent = 'アニメーションを停止';
+          animatePWMWave();
+        } else {
+          animatePwmBtn.textContent = '正弦波を生成するアニメーション';
+          dutyCycle = 0.5;
+          dutySlider.value = 50;
+          dutyValueSpan.textContent = 50;
+          drawPWM();
+        }
+      });
+
+      function animatePWMWave(){
+        if(!isPwmAnimating) return;
+        pwmAnimationAngle += 0.05;
+        if (pwmAnimationAngle > 2*Math.PI) pwmAnimationAngle -= 2*Math.PI;
+        dutyCycle = (1 + Math.sin(pwmAnimationAngle + Math.PI/2))/2;
+        dutySlider.value = Math.round(dutyCycle*100);
+        dutyValueSpan.textContent = Math.round(dutyCycle*100);
+        drawPWM();
+        requestAnimationFrame(animatePWMWave);
+      }
+
+      // --- init ---
+      resizeAllCanvases();
+      updatePhaseChartData();
+      animateMagField();
+      drawPWM();
+    });
+  </script>
+</body>
+</html>
